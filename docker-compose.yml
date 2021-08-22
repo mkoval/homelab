@@ -1,0 +1,83 @@
+version: '3'
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: "ghcr.io/home-assistant/home-assistant:${HASS_TAG:-stable}"
+    depends_on:
+      - postgresql
+    networks:
+      - homeassistant
+    volumes:
+      - homeassistant_cfg:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    ports:
+      - 8123:8123
+
+  mongo:
+    container_name: mongo
+    image: "mongo:${MONGO_TAG}"
+    networks:
+      - unifi
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+      - mongo_cfg:/data/configdb
+    environment:
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo-passwd
+
+  postgres:
+    container_name: postgresql
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-passwd
+
+  unifi:
+    container_name: unifi
+    image: "jacobalberty/unifi:${UNIFI_TAG:-latest}"
+    depends_on:
+      - mongo
+    init: true
+    networks:
+      - unifi
+    restart: unless-stopped
+    volumes:
+      - unifi_dir:/unifi
+      - unifi_data:/unifi/data
+      - unifi_log:/unifi/log
+      - unifi_cert:/unifi/cert
+      - unifi_init:/unifi/init.d
+      - unifi_run:/var/run/unifi
+      # Mount local folder for backups and autobackups
+      - ./backup:/unifi/data/backup
+    user: unifi
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
+    environment:
+      DB_URI: mongodb://mongo/unifi
+      STATDB_URI: mongodb://mongo/unifi_stat
+      DB_NAME: unifi
+    ports:
+      - "3478:3478/udp" # STUN
+      - "6789:6789/tcp" # Speed test
+      - "8080:8080/tcp" # Device/ controller comm.
+      - "8443:8443/tcp" # Controller GUI/API as seen in a web browser
+      - "8880:8880/tcp" # HTTP portal redirection
+      - "8843:8843/tcp" # HTTPS portal redirection
+      - "10001:10001/udp" # AP discovery
+
+volumes:
+  mongo_data:
+  mongo_cfg:
+  unifi_dir:
+  unifi_data:
+  unifi_log:
+  unifi_cert:
+  unifi_init:
+  unifi_run:
+  homeassistant_cfg:
+
+networks:
+  unifi:
+  homeassistant:
